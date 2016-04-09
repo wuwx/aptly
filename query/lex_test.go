@@ -12,8 +12,13 @@ type LexerSuite struct {
 var _ = Suite(&LexerSuite{})
 
 func (s *LexerSuite) TestLexing(c *C) {
-	_, ch := lex("query", "package (<< 1.3), $Source | !\"app\", 'd\"\\a\\'ta' {i386}")
+	_, ch := lex("query", "[1:-3]package (<< 1.3), $Source | !\"app\", 'd\"\\a\\'ta' {i386}")
 
+	c.Check(<-ch, Equals, item{typ: itemLeftSquare, val: "["})
+	c.Check(<-ch, Equals, item{typ: itemNumber, val: "", num: 1})
+	c.Check(<-ch, Equals, item{typ: itemColon, val: ":"})
+	c.Check(<-ch, Equals, item{typ: itemNumber, val: "", num: -3})
+	c.Check(<-ch, Equals, item{typ: itemRightSquare, val: "]"})
 	c.Check(<-ch, Equals, item{typ: itemString, val: "package"})
 	c.Check(<-ch, Equals, item{typ: itemLeftParen, val: "("})
 	c.Check(<-ch, Equals, item{typ: itemLt, val: "<<"})

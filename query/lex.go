@@ -2,6 +2,7 @@ package query
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -17,27 +18,32 @@ const (
 	itemError          // error occurred;
 	// value is text of error
 	itemEOF
-	itemLeftParen  // (
-	itemRightParen // )
-	itemOr         // |
-	itemAnd        // ,
-	itemNot        // !
-	itemLt         // <<
-	itemLtEq       // <=, <
-	itemGt         // >>
-	itemGtEq       // >=, >
-	itemEq         // =
-	itemPatMatch   // %
-	itemRegexp     // ~
-	itemLeftCurly  // {
-	itemRightCurly // }
+	itemLeftParen   // (
+	itemRightParen  // )
+	itemOr          // |
+	itemAnd         // ,
+	itemNot         // !
+	itemLt          // <<
+	itemLtEq        // <=, <
+	itemGt          // >>
+	itemGtEq        // >=, >
+	itemEq          // =
+	itemPatMatch    // %
+	itemRegexp      // ~
+	itemLeftCurly   // {
+	itemRightCurly  // }
+	itemLeftSquare  // [
+	itemRightSquare // ]
+	itemColon       // :
 	itemString
+	itemNumber
 )
 
 // item represents a token returned from the scanner.
 type item struct {
 	typ itemType // Type, such as itemNumber.
 	val string   // Value, such as "23.2".
+	num int      // Integer value
 }
 
 func (i item) String() string {
@@ -62,13 +68,14 @@ type stateFn func(*lexer) stateFn
 
 // lexer holds the state of the scanner.
 type lexer struct {
-	name  string    // used only for error reports.
-	input string    // the string being scanned.
-	start int       // start position of this item.
-	pos   int       // current position in the input.
-	width int       // width of last rune read from input.
-	items chan item // channel of scanned items.
-	last  item
+	name        string    // used only for error reports.
+	input       string    // the string being scanned.
+	start       int       // start position of this item.
+	pos         int       // current position in the input.
+	width       int       // width of last rune read from input.
+	squareLevel int       // level of square braces
+	items       chan item // channel of scanned items.
+	last        item
 }
 
 func lex(name, input string) (*lexer, chan item) {
@@ -83,7 +90,7 @@ func lex(name, input string) (*lexer, chan item) {
 
 // emit passes an item back to the client.
 func (l *lexer) emit(t itemType) {
-	l.items <- item{t, l.input[l.start:l.pos]}
+	l.items <- item{t, l.input[l.start:l.pos], 0}
 	l.start = l.pos
 }
 
@@ -146,6 +153,7 @@ func (l *lexer) errorf(format string, args ...interface{}) stateFn {
 	l.items <- item{
 		itemError,
 		fmt.Sprintf(format, args...),
+		0,
 	}
 	return nil
 }
@@ -165,6 +173,14 @@ func lexMain(l *lexer) stateFn {
 		l.emit(itemLeftCurly)
 	case r == '}':
 		l.emit(itemRightCurly)
+	case r == '[':
+		l.squareLevel++
+		l.emit(itemLeftSquare)
+	case r == ']':
+		l.squareLevel--
+		l.emit(itemRightSquare)
+	case r == ':':
+		l.emit(itemColon)
 	case r == '|':
 		l.emit(itemOr)
 	case r == ',':
@@ -197,6 +213,15 @@ func lexMain(l *lexer) stateFn {
 		l.emit(itemPatMatch)
 	case r == '~':
 		l.emit(itemRegexp)
+	case r == '+' || r == '-' || r == '0' || r == '1' || r == '2' || r == '3' ||
+		r == '4' || r == '5' || r == '6' || r == '7' || r == '8' || r == '9':
+
+		l.backup()
+		if l.squareLevel > 0 {
+			return lexNumber
+		}
+
+		return lexString
 	default:
 		l.backup()
 		return lexString
@@ -216,7 +241,7 @@ func lexString(l *lexer) stateFn {
 			r = l.next()
 			if r == quote {
 				l.ignore()
-				l.items <- item{itemString, result}
+				l.items <- item{itemString, result, 0}
 				return lexMain
 			}
 			if r == '\\' {
@@ -230,7 +255,7 @@ func lexString(l *lexer) stateFn {
 	} else {
 		// unquoted string
 		for {
-			if unicode.IsSpace(r) || strings.IndexRune("()|,!{}", r) > 0 {
+			if unicode.IsSpace(r) || strings.IndexRune("()|,!{}[]", r) > 0 {
 				l.backup()
 				l.emit(itemString)
 				return lexMain
@@ -244,4 +269,32 @@ func lexString(l *lexer) stateFn {
 			r = l.next()
 		}
 	}
+}
+
+func lexNumber(l *lexer) stateFn {
+	r := l.next()
+	numStr := ""
+
+	if r == '+' || r == '-' {
+		numStr += string(r)
+		l.ignore()
+		r = l.next()
+	}
+
+	for r >= '0' && r <= '9' {
+		numStr += string(r)
+		l.ignore()
+		r = l.next()
+	}
+
+	num, err := strconv.Atoi(numStr)
+	if err != nil {
+		return l.errorf("invalid number: %s", err)
+	}
+
+	l.items <- item{itemNumber, "", num}
+
+	l.backup()
+
+	return lexMain
 }

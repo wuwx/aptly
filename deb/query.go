@@ -52,6 +52,12 @@ type NotQuery struct {
 	Q PackageQuery
 }
 
+// VersionRangeQuery is [a:b] Q
+type VersionRangeQuery struct {
+	Low, High int
+	Q         PackageQuery
+}
+
 // FieldQuery is generic request against field
 type FieldQuery struct {
 	Field    string

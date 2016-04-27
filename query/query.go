@@ -12,7 +12,7 @@ import (
 
   Query := A | A '|' Query
   A := B | B ',' A
-  B := C | '!' B
+  B := C | '!' B | '[' 1 ':' -2 ']' B
   C := '(' Query ')' | D
   D := <field> <condition> <arch_condition> | <pkg>_<version>_<arch>
   field := <package-name> | <field> | $special_field

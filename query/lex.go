@@ -50,6 +50,9 @@ func (i item) String() string {
 	if i.typ == itemString {
 		return fmt.Sprintf("%#v", i.val)
 	}
+	if i.typ == itemNumber {
+		return fmt.Sprintf("%d", i.num)
+	}
 	if i.typ == itemEOF {
 		return "<EOL>"
 	}

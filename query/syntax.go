@@ -63,11 +63,41 @@ func (p *parser) A() deb.PackageQuery {
 	return q
 }
 
-// B := C | '!' B
+// B := C | '!' B  | '[' 1 ':' -2 ']' B
 func (p *parser) B() deb.PackageQuery {
 	if p.input.Current().typ == itemNot {
 		p.input.Consume()
 		return &deb.NotQuery{Q: p.B()}
+	} else if p.input.Current().typ == itemLeftSquare {
+		p.input.Consume()
+
+		res := &deb.VersionRangeQuery{}
+
+		if p.input.Current().typ == itemNumber {
+			res.Low = p.input.Current().num
+			p.input.Consume()
+		}
+
+		if p.input.Current().typ != itemColon {
+			panic(fmt.Sprintf("unexpected token %s: expecting ':'", p.input.Current()))
+		}
+		p.input.Consume()
+
+		if p.input.Current().typ == itemNumber {
+			res.High = p.input.Current().num
+			p.input.Consume()
+		} else {
+			res.High = 0xffff
+		}
+
+		if p.input.Current().typ != itemRightSquare {
+			panic(fmt.Sprintf("unexpected token %s: expecting ']'", p.input.Current()))
+		}
+		p.input.Consume()
+
+		res.Q = p.B()
+
+		return res
 	}
 	return p.C()
 }

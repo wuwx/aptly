@@ -1,11 +1,14 @@
 #!/usr/bin/env python
 
+from contextlib import contextmanager
 import glob
 import importlib
 import os
 import inspect
 import fnmatch
 import sys
+import shutil
+import tempfile
 import traceback
 import random
 
@@ -107,6 +110,15 @@ def run(include_long_tests=False, capture_results=False, tests=None, filters=Non
         sys.exit(1)
 
 
+@contextmanager
+def tempdir():
+    path = tempfile.mkdtemp()
+    try:
+        yield path
+    finally:
+        shutil.rmtree(path)
+
+
 if __name__ == "__main__":
     if 'APTLY_VERSION' not in os.environ:
         try:
@@ -138,4 +150,11 @@ if __name__ == "__main__":
         else:
             filters.append(arg)
 
-    run(include_long_tests, capture_results, tests, filters)
+    with tempdir() as tmpdir:
+        # Make sure gpg doesn't use the regular configs. Otherwise it may have
+        # overriding default key settings and make tests flaky.
+        gpghome = os.path.join(tmpdir, 'gnupg')
+        os.makedirs(gpghome, mode=0o700)
+        os.environ['GNUPGHOME'] = gpghome
+
+        run(include_long_tests, capture_results, tests, filters)
